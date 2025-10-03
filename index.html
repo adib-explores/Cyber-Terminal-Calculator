@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber-Terminal Calculator (v2.0)</title>
+  <!-- Google Font for Terminal Aesthetic -->
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+  <!-- Tone.js for sound effects -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+  <style>
+    /* ------------------- Base Styles ------------------- */
+    :root {
+      --neon-green: #33ff33;
+      --dark-green: #008800;
+      --electric-red: #ff3333;
+      --bg-dark: #0a0a0a;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      /* Use the terminal font with a monospace fallback */
+      font-family: 'VT323', monospace; 
+    }
+    
+    body {
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      background: var(--bg-dark);
+      color: var(--neon-green);
+      position: relative;
+    }
+    
+    /* ------------------- Scanline Effect (For Retro Monitor Look) ------------------- */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      /* Subtle scanlines pattern */
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent 0px,
+        rgba(0, 0, 0, 0.4) 1px,
+        transparent 2px
+      );
+      opacity: 0.2;
+      z-index: 10;
+    }
+
+    /* ------------------- Matrix Animation Background ------------------- */
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: -1;
+      opacity: 0.7;
+    }
+
+    /* ------------------- Calculator Container ------------------- */
+    .calculator {
+      background: rgba(0, 0, 0, 0.85); /* Slightly darker background */
+      padding: 25px;
+      border-radius: 20px;
+      /* Intense Outer/Inner Glow for cyberpunk look */
+      box-shadow: 0px 0px 40px rgba(51, 255, 51, 0.8), 0px 0px 10px rgba(51, 255, 51, 0.3) inset; 
+      backdrop-filter: blur(5px);
+      width: min(90%, 360px); /* Responsive width */
+      border: 3px solid var(--neon-green);
+      z-index: 5;
+    }
+
+    /* ------------------- Display Screen ------------------- */
+    .display {
+      background: rgba(0, 255, 0, 0.05);
+      height: 70px;
+      width: 100%;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      text-align: right;
+      padding: 15px;
+      font-size: 32px; /* Larger font size */
+      color: var(--neon-green);
+      overflow-x: auto;
+      border: 3px solid var(--neon-green);
+      /* Text Glow */
+      text-shadow: 0 0 8px var(--neon-green); 
+    }
+    .display.error {
+        color: var(--electric-red);
+        text-shadow: 0 0 8px var(--electric-red);
+    }
+
+    /* ------------------- Buttons Layout ------------------- */
+    .buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px; /* Increased gap */
+    }
+
+    /* ------------------- Button Styling ------------------- */
+    button {
+      padding: 18px 10px;
+      font-size: 24px; /* Larger text for easier tapping */
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      background: rgba(0, 255, 0, 0.1);
+      color: var(--neon-green);
+      border: 1px solid var(--dark-green);
+      transition: 0.15s ease-in-out;
+      box-shadow: 0 0 5px rgba(0, 255, 0, 0.3); /* Subtle button glow */
+    }
+
+    button:hover {
+      background: var(--neon-green);
+      color: var(--bg-dark);
+      transform: scale(1.05);
+      /* Intense hover effect */
+      box-shadow: 0px 0px 20px var(--neon-green), 0px 0px 5px var(--neon-green) inset;
+    }
+
+    .span-two {
+      grid-column: span 2;
+    }
+    
+    /* ------------------- Special Buttons (C, DEL) ------------------- */
+    .clear-ops {
+        color: var(--dark-green);
+        border: 1px solid var(--dark-green);
+    }
+    .clear-ops:hover {
+        background: var(--dark-green);
+        color: var(--bg-dark);
+        box-shadow: 0px 0px 20px var(--dark-green), 0px 0px 5px var(--dark-green) inset;
+    }
+
+    /* ------------------- Equal Button (Red Alert) ------------------- */
+    .equal {
+      background: rgba(255, 0, 0, 0.1);
+      border: 3px solid var(--electric-red);
+      color: var(--electric-red);
+      text-shadow: 0 0 8px var(--electric-red);
+    }
+
+    .equal:hover {
+      background: var(--electric-red);
+      color: black;
+      /* Dangerous red explosion on hover */
+      box-shadow: 0px 0px 30px var(--electric-red); 
+    }
+    
+    /* ------------------- Mobile Responsiveness ------------------- */
+    @media (max-width: 400px) {
+        .calculator {
+            padding: 15px;
+            border-radius: 15px;
+        }
+        .display {
+            height: 60px;
+            font-size: 28px;
+            padding: 10px;
+        }
+        button {
+            padding: 15px 5px;
+            font-size: 22px;
+        }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Matrix Background -->
+  <canvas id="matrix"></canvas>
+
+  <!-- Calculator -->
+  <div class="calculator">
+    <!-- Initial message on display -->
+    <div class="display" id="display">READY_</div>
+
+    <div class="buttons">
+      <!-- Clear and Delete buttons use clear-ops for different coloring -->
+      <button onclick="clearDisplay()" class="clear-ops">C</button>
+      <button onclick="deleteChar()" class="clear-ops">DEL</button>
+      
+      <button onclick="append('%')">%</button>
+      <button onclick="append('/')">÷</button>
+
+      <button onclick="append('7')">7</button>
+      <button onclick="append('8')">8</button>
+      <button onclick="append('9')">9</button>
+      <button onclick="append('*')">×</button>
+
+      <button onclick="append('4')">4</button>
+      <button onclick="append('5')">5</button>
+      <button onclick="append('6')">6</button>
+      <button onclick="append('-')">-</button>
+
+      <button onclick="append('1')">1</button>
+      <button onclick="append('2')">2</button>
+      <button onclick="append('3')">3</button>
+      <button onclick="append('+')">+</button>
+
+      <button onclick="append('0')" class="span-two">0</button>
+      <button onclick="append('.')">.</button>
+      <button onclick="calculate()" class="equal">=</button>
+    </div>
+  </div>
+
+  <script>
+    // ------------------- Calculator Logic and Sound -------------------
+    let display = document.getElementById("display");
+    const initialText = "READY_";
+    let isErrorState = false;
+    
+    // Tone.js Synth Setup
+    // Use a simple duo synth for a digital 'click'
+    let clickSynth = new Tone.MembraneSynth().toDestination(); 
+    // Use a metal synth for the 'equal' button for a dramatic effect
+    let equalSynth = new Tone.MetalSynth({
+        frequency: 200,
+        envelope: { attack: 0.001, decay: 0.2, sustain: 0.01, release: 0.1 },
+        harmonicity: 3.1,
+        modulationIndex: 10
+    }).toDestination();
+    
+    // Function to handle sound playback on button press
+    function playClick() {
+        // Start Tone.js context if it's suspended (required for many browsers)
+        if (Tone.context.state !== 'running') {
+            Tone.context.resume();
+        }
+        clickSynth.triggerAttackRelease("C4", "32n");
+    }
+
+    function playEqualSound() {
+        if (Tone.context.state !== 'running') {
+            Tone.context.resume();
+        }
+        equalSynth.triggerAttackRelease("400", "16n", Tone.now(), 0.8);
+    }
+    
+    function resetError() {
+        if (isErrorState) {
+            display.textContent = "0";
+            display.classList.remove('error');
+            isErrorState = false;
+        }
+        if (display.textContent === initialText) {
+            display.textContent = "0";
+        }
+    }
+
+    function clearDisplay() {
+      playClick();
+      display.textContent = initialText;
+      display.classList.remove('error');
+      isErrorState = false;
+    }
+
+    function deleteChar() {
+      playClick();
+      resetError();
+      // Remove the last character, if result is empty, show "0"
+      display.textContent = display.textContent.slice(0, -1) || "0";
+    }
+
+    function append(char) {
+      playClick();
+      resetError();
+      if (display.textContent === "0" || display.textContent === initialText) {
+        // Prevent leading zeros unless the character is a decimal point
+        if (char === '.' || char === '0') {
+            display.textContent = '0' + char;
+        } else {
+            display.textContent = char;
+        }
+      } else {
+        // Prevent multiple operators in a row (simple check)
+        const lastChar = display.textContent.slice(-1);
+        const isOperator = (c) => ['+', '-', '*', '/', '%'].includes(c);
+        if (isOperator(lastChar) && isOperator(char)) {
+            // Replace the last operator instead of appending
+            display.textContent = display.textContent.slice(0, -1) + char;
+        } else {
+            display.textContent += char;
+        }
+      }
+    }
+
+    function calculate() {
+      playEqualSound(); // Play the special sound for calculation
+      resetError();
+      let expression = display.textContent;
+      
+      // Replace display symbols with JavaScript equivalents
+      expression = expression.replace(/÷/g, '/').replace(/×/g, '*');
+      
+      try {
+        // Use Math.round for better precision on floating point results
+        let result = eval(expression);
+
+        if (isNaN(result) || !isFinite(result)) {
+            throw new Error("Invalid result");
+        }
+        // Limit precision for display purposes
+        display.textContent = result.toFixed(6).replace(/\.?0+$/, ""); 
+
+      } catch (e) {
+        display.textContent = "SYNTAX ERROR_";
+        display.classList.add('error');
+        isErrorState = true;
+      }
+    }
+
+    // ------------------- Matrix Animation Logic -------------------
+    const canvas = document.getElementById("matrix");
+    const ctx = canvas.getContext("2d");
+
+    // Initialize dimensions and redraw on resize
+    function resizeCanvas() {
+        canvas.height = window.innerHeight;
+        canvas.width = window.innerWidth;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const letters = "01!@#$%^&*()_+=-{}[]:;<>?/"; // Binary and symbols for more interest
+    const fontSize = 18;
+    const columns = canvas.width / fontSize;
+    const drops = [];
+
+    // Initialize drops array to control where each column starts drawing
+    for (let x = 0; x < columns; x++) {
+      drops[x] = 1;
+    }
+
+    function draw() {
+      // Semi-transparent black rectangle to blur the previous frame and create the 'tail' effect
+      ctx.fillStyle = "rgba(0, 0, 0, 0.08)"; 
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "#0F0"; // Green color
+      ctx.font = fontSize + "px 'VT323', monospace";
+
+      for (let i = 0; i < drops.length; i++) {
+        // Pick a random character from the letters set
+        const text = letters.charAt(Math.floor(Math.random() * letters.length));
+        
+        // Draw the character
+        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+        // Send the drop back to the top randomly
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.985) { // Adjusted drop rate
+          drops[i] = 0;
+        }
+
+        // Move the drop down
+        drops[i]++;
+      }
+    }
+    
+    // Start the animation loop when the window is fully loaded
+    window.onload = function () {
+      setInterval(draw, 50); // Slower interval for a cleaner look
+    }
+
+  </script>
+</body>
+</html>
